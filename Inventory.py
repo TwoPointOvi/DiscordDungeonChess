@@ -9,6 +9,9 @@ class Inventory:
     def add_item(self, new_item):
         self.item_list.append(new_item)
 
+    def add_item(self, new_item, slot):
+        self.item_list[slot] = new_item
+
     def replace_item(self, new_item, slot):
         self.item_list[slot] = new_item
 
