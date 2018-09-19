@@ -2,6 +2,12 @@ class Inventory:
     """Class for the inventory of the players where objects are stored"""
 
     item_list = []
+    item_dic = {
+        'melee': '',
+        'long_range': '',
+        'consumable1': '',
+        'consumable2': '',
+        'armor': ''}
 
     def __init__(self):
         self.item_list = []

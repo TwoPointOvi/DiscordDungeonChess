@@ -276,7 +276,7 @@ class Generator:
         return self.level
 
     def gen_tiles_level(self):
-
+        number = 0
         for row_num, row in enumerate(self.level):
             tmp_tiles = []
 
@@ -288,7 +288,8 @@ class Generator:
                 if col == 'wall':
                     tmp_tiles.append(self.tiles['wall'])
                 if isinstance(col, int):
-                    tmp_tiles.append(str(col))
+                    tmp_tiles.append(str(number))
+                    number += 1
 
             self.tiles_level.append(''.join(tmp_tiles))
 

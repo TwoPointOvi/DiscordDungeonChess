@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import random
+from collections import deque
 import discord
 from discord.ext import commands
 
@@ -9,7 +10,7 @@ from Player import Player
 from Inventory import Inventory
 from Object import Weapon
 
-TOKEN = 'XXXXXXXXXXXXXX'
+TOKEN = 'NDQ2NjcyNTEzODYzMjU0MDI2.Dlh4Ww.6ELuz08umoDRbCcz8Tw7h4vgEos'
 
 # client = discord.Client()
 bot = commands.Bot(command_prefix='!')
@@ -18,11 +19,12 @@ game_started = False
 player_list = dict()
 map_tiles = []
 gen = None
+player_order = deque()
 
 
-def create_player(name, discord_id):
+def create_player(name, discord_id, author):
     if discord_id not in player_list.keys():
-        new_player = Player(name, discord_id)
+        new_player = Player(name, discord_id, author)
         player_list[discord_id] = new_player
 
 
@@ -43,7 +45,6 @@ def add_players():
     global player_list
     global map_tiles
     global gen
-    number = 0
 
     for player in player_list.keys():
         player_added = False
@@ -52,14 +53,18 @@ def add_players():
             rand_y = random.randrange(0, 100)
             # TODO: Check if players are close close to each other
             if map_tiles[rand_x][rand_y] == 'floor':
-                map_tiles[rand_x][rand_y] = number
+                map_tiles[rand_x][rand_y] = player_list[player].discord_id
                 # Update player object in the dictionary
-                updated_player = player_list[player]
-                updated_player.set_position(rand_x, rand_y)
-                player_list[player] = updated_player
+                player_list[player].set_position(rand_x, rand_y)
                 player_added = True
-        number = number + 1
     gen.replace_map(map_tiles)
+
+
+def order_players():
+    global player_order
+    player_pool = player_list.keys()
+    random.shuffle(player_pool)
+    player_order = deque(player_pool)
 
 
 @bot.command(pass_context=True)
@@ -85,7 +90,7 @@ async def join_game(context, *args):
     # Create and add a player to the board
     author = context.message.author
     name = author.name
-    create_player(name, name + author.id)
+    create_player(name, author.id, author)
 
     await bot.say('{0.mention} just joined !'.format(author))
 
@@ -102,9 +107,10 @@ async def sudoku(context, *args):
 @bot.command(pass_context=True)
 async def pickup(context, *args):
     author = context.message.author
+    author_id = author.id
     if author in player_list.keys():
         # TODO: Check if there is an item near the player
-        player = player_list.get(author)
+        player = player_list[author_id]
         if len(args) == 1:
             item = args[0]
             player.inventory.add_item(item)
@@ -124,7 +130,7 @@ async def pickup(context, *args):
 async def look(context, *args):
     author = context.message.author
     name = author.name
-    player_info = player_list[name + author.id]
+    player_info = player_list[author.id]
     row = player_info.position_x
     column = player_info.position_y
 
@@ -148,7 +154,7 @@ async def look(context, *args):
 async def status(context, *args):
     author = context.message.author
     name = author.name
-    player_info = player_list[name + author.id]
+    player_info = player_list[author.id]
 
     await bot.send_message(author, 'Health: {}/100\nArmor: {}\nStamina: {}/10'
                            .format(player_info.health, player_info.armor, player_info.stamina))
@@ -156,12 +162,78 @@ async def status(context, *args):
 
 @bot.command(pass_context=True)
 async def move(context, *args):
+    global player_list
     author = context.message.author
     name = author.name
-    player_info = player_list[name + author.id]
-    # Check stamina if it's possible to move
-    move_x = 0
-    move_y = 0
+    player_info = player_list[author.id]
+    if 0 < len(args) < 3:
+        move_x = args[0]
+        move_y = args[1]
+        # Check stamina if it's possible to move
+        if player_info.stamina >= move_x + move_y:
+            # Move player if you can move there
+            if map_tiles[move_x][move_y] == 'floor':
+                player_info.move(move_x, move_y)
+                await  bot.say('{0.mention just moved.}'.format(author))
+            else:
+                await bot.say('{0.mention} can\' move  there. Try again.'.format(author))
+        else:
+            await bot.say('{0.mention} not enough stamina.'.format(author))
+    else:
+        await bot.say('{0.mention} command is used inappropriately.'.format(author))
+
+
+@bot.command(pass_context=True)
+async def inventory(context, *args):
+    author = context.message.author
+    name = author.name
+    player_info = player_list[author.id]
+    inv = '\n'.join(str(s) for s in player_info.inventory.item_list).strip()
+    if inv != '' and inv != '\n' and inv is not None:
+        await bot.send_message(author, inv)
+    else:
+        await bot.send_message(author, 'You have no items.')
+
+
+@bot.command(pass_context=True)
+async def end_turn(context, *args):
+    global player_order
+    author = context.message.author
+    player_order.rotate(1)
+    next_player = player_list[player_order.index(0)].author
+    await bot.say('{0.mention} turn ended.\n {0.mention} turn starts now.'.format(author, next_player))
+
+
+async def attack(wpn_type, context, pos_x, pos_y):
+    author = context.message.author
+    player_info = player_list[author.id]
+    distance_attack = player_info.inventory.item_dic[wpn_type].wpn_range
+    if pos_x < distance_attack or pos_y < distance_attack:
+        attack_pos = map_tiles[player_info.position_x + pos_x][player_info.position_y + pos_y]
+        if isinstance(attack_pos, int):
+            player_info.attack(player_list[attack_pos])
+            await bot.say('{0.mention} landed an attack.'.format(author))
+            await bot.send_message(player_list[attack_pos].author,
+                                   'You got hit for {} damage.'.format(player_info.inventory.item_dic[wpn_type].damage))
+        else:
+            await bot.say('{0.mention} missed the attack!'.format(author))
+
+
+@bot.command(pass_context=True)
+async def melee(context, *args):
+    wpn_type = 'melee'
+    pos_x = args[0]
+    pos_y = args[1]
+    attack(wpn_type, context, pos_x, pos_y)
+
+
+@bot.command(pass_context=True)
+async def shoot(context, *args):
+    wpn_type = 'long_range'
+    pos_x = args[0]
+    pos_y = args[1]
+    attack(wpn_type, context, pos_x, pos_y)
+
 
 bot.run(TOKEN, bot=True)
 # client.run(TOKEN)

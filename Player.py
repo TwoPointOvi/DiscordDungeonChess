@@ -14,9 +14,10 @@ class Player:
     position_x = 0
     position_y = 0
 
-    def __init__(self, name, discord_id):
+    def __init__(self, name, discord_id, author):
         self.name = name
         self.discord_id = discord_id
+        self.author = author
 
     def set_position(self, x, y):
         self.position_x = x
@@ -63,4 +64,7 @@ class Player:
     def move(self, x, y):
         self.position_x += x
         self.position_y += y
+
+    def attack(self, player, wpn_type):
+        player.reduce_health(self.inventory.item_dic[wpn_type].damage)
 
